@@ -3,7 +3,7 @@ import { expectResult, open, sessionDir, token, workspace } from "./harness.ts"
 
 /**
  * Multi-replica gateway scenarios: several opencode-execd replicas behind one load balancer,
- * which is how the Bridge style deployment exposes a single stable service URL.
+ * which is how a deployment can expose one stable service URL in front of several replicas.
  *
  *   docker run -d --name opencode-execd-it-1 -p 19021:9010 ... opencode-execd:local
  *   docker run -d --name opencode-execd-it-2 -p 19022:9010 ... opencode-execd:local

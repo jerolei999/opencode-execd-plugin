@@ -1,21 +1,20 @@
 # OpenCode Execd Plugin
 
-Transparent remote shell execution for OpenCode. The plugin overrides only the built-in `bash` tool and forwards every command to an [opencode-execd](https://github.com/jerolei999/opencode-execd) worker service, which runs it through OpenSandbox `execd` inside a normal SaaS container.
+Transparent remote shell execution for OpenCode. The plugin overrides only the built-in `bash` tool and forwards every command to an [opencode-execd](https://github.com/jerolei999/opencode-execd) service, a standalone execution sandbox that embeds the OpenSandbox `execd` daemon in an ordinary container.
 
 It is intended for fixed SaaS environments where you can deploy a private service image but cannot grant a Docker socket, privileged mode, writable cgroups, or Kubernetes API access, and where the workspace is already shared (for example through CubeFS). No file synchronization is needed: `read`, `write`, `edit`, `grep`, `glob`, patching, and LSP stay inside OpenCode and see the same files directly.
 
 ## Boundary
 
 ```text
-OpenCodeBridge (existing auth/control plane)
-        |
-        v
 OpenCode server + this plugin ---- POST /execute ----> opencode-execd service
                                                         (admission, path policy,
                                                          concurrency, execd)
 ```
 
-The Bridge is unchanged and command bytes never pass through it. The plugin calls the execution service directly. OpenCode Core is not modified.
+Command bytes never pass through an intermediate control plane; the plugin calls the execution
+service directly. OpenCode Core is not modified, and the service has no opinion about how you
+authenticate or route traffic to it.
 
 ## Install
 
