@@ -17,6 +17,10 @@ import { expectResult, open, sessionDir, token, workspace } from "./harness.ts"
  */
 const gateway = process.env.OPENCODE_EXECD_TEST_GATEWAY
 const replicas = (process.env.OPENCODE_EXECD_TEST_REPLICAS ?? "").split(",").filter(Boolean)
+// With a shared session root (CubeFS mounted at OPENCODE_SESSION_ROOT) every replica sees the
+// same session home, so HOME continuity and /release stop depending on where the request lands.
+// Same-session serialization stays node-local, because that registry lives in worker memory.
+const sharedHome = process.env.OPENCODE_EXECD_TEST_SHARED_HOME === "1"
 const enabled = Boolean(gateway && workspace && replicas.length > 1)
 const suite = enabled ? describe : describe.skip
 
@@ -77,7 +81,8 @@ suite("gateway integration: replicas behind one URL", () => {
       observed.push(read.output.trim())
     }
     console.log(`[gateway] session HOME reads through the gateway: ${observed.join(", ")}`)
-    expect(observed).toContain("MISSING")
+    if (sharedHome) expect(observed).not.toContain("MISSING")
+    else expect(observed).toContain("MISSING")
   }, 120_000)
 
   test("per-session concurrency guard is not shared between replicas", async () => {
@@ -110,8 +115,8 @@ suite("gateway integration: replicas behind one URL", () => {
       }),
     )
     console.log(`[gateway] after release: ${survivors.map((item) => `${item.replica}=${item.present}`).join(", ")}`)
-    // The replica that ran the command keeps its session directory: /release went to the other one.
-    expect(survivors.filter((item) => item.present).length).toBeGreaterThan(0)
+    if (sharedHome) expect(survivors.filter((item) => item.present)).toHaveLength(0)
+    else expect(survivors.filter((item) => item.present).length).toBeGreaterThan(0)
     expect(executed.sandboxID).not.toBe("")
   }, 120_000)
 

@@ -114,6 +114,21 @@ upstream execd_workers {
 ```
 
 Stickiness still spreads different sessions across replicas, so capacity adds up across them.
+
+Mounting CubeFS at `OPENCODE_SESSION_ROOT` removes part of the problem, because every replica then
+sees the same session home, but it does not remove all of it:
+
+| Symptom | Round robin | Round robin + shared session root | Sticky |
+| --- | --- | --- | --- |
+| Session `HOME` state | `MISSING` on the next call | `state, state, state, state` | stable |
+| `POST /release` | leaked on one replica | cleaned on both | cleaned |
+| Same-session concurrency | both accepted | **both accepted** | second rejected with `503` |
+| Cancellation | can miss the running command | **can still miss it** | reaches the owning replica |
+
+The two remaining rows are worker-memory state (`running`/`reserved` maps and the `execd` command
+id), so they need affinity or an external lock regardless of where `HOME` lives. Run the control
+suite with `OPENCODE_EXECD_TEST_SHARED_HOME=1` to assert the shared-root behaviour instead of the
+node-local one.
 Adding or removing a replica remaps some sessions, and the session `HOME` starts empty on the new
 node: keep `HOME` on shared storage (`OPENCODE_SESSION_ROOT` on CubeFS) when commands depend on
 state across calls. If a sticky gateway is not an option, pass the replica list through plugin option
