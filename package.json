@@ -26,6 +26,7 @@
     "test": "bun test",
     "test:integration": "bun test test/integration/scenarios.test.ts",
     "test:opencode": "bun test test/integration/opencode.test.ts",
+    "test:gateway": "bun test test/integration/gateway.test.ts test/integration/gateway-sticky.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {

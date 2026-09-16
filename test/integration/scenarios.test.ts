@@ -1,8 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test"
 import { readFile, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { createHash } from "node:crypto"
-import { OpenCodeExecdPlugin } from "../../src/plugin.ts"
+import { expectResult, open, sessionDir, workspace } from "./harness.ts"
 
 /**
  * End-to-end scenario suite for the OpenCode bash override.
@@ -14,81 +13,11 @@ import { OpenCodeExecdPlugin } from "../../src/plugin.ts"
  *   OPENCODE_EXECD_TEST_ENDPOINT=http://127.0.0.1:19020 \
  *   OPENCODE_EXECD_TEST_TOKEN=it-plugin-secret \
  *   OPENCODE_EXECD_TEST_WORKSPACE=/private/tmp/execd-it \
- *   bun test test/integration
+ *   bun test test/integration/scenarios.test.ts
  *
  * Without those variables the suite is skipped, so `bun test` stays offline.
  */
-const endpoint = process.env.OPENCODE_EXECD_TEST_ENDPOINT
-const token = process.env.OPENCODE_EXECD_TEST_TOKEN
-const workspace = process.env.OPENCODE_EXECD_TEST_WORKSPACE
-const enabled = Boolean(endpoint && workspace)
-
-type Outcome =
-  | { readonly kind: "result"; readonly output: string; readonly exit: number; readonly truncated: boolean; readonly sandboxID: string }
-  | { readonly kind: "error"; readonly message: string }
-
-type Session = Awaited<ReturnType<typeof open>>
-
-async function open(input: {
-  session: string
-  directory?: string
-  root?: string
-  token?: string
-  env?: Record<string, string>
-  signal?: AbortSignal
-  endpoint?: string
-}) {
-  const root = input.root ?? workspace!
-  const directory = input.directory ?? root
-  const hooks = await OpenCodeExecdPlugin(
-    { directory, worktree: root } as never,
-    { endpoint: input.endpoint ?? endpoint!, token: input.token ?? token, shell: "/bin/bash", env: input.env },
-  )
-  const tool = hooks.tool!.bash as {
-    execute: (args: unknown, ctx: unknown) => Promise<{ output: string; metadata: Record<string, unknown> }>
-  }
-  const context = {
-    sessionID: input.session,
-    messageID: "message-1",
-    agent: "build",
-    directory,
-    worktree: root,
-    abort: input.signal ?? new AbortController().signal,
-    metadata() {},
-    async ask() {},
-  } as never
-
-  return {
-    run: async (call: { command: string; workdir?: string; timeout?: number }): Promise<Outcome> => {
-      try {
-        const result = await tool.execute(call, context)
-        return {
-          kind: "result",
-          output: result.output,
-          exit: Number(result.metadata.exit),
-          truncated: Boolean(result.metadata.truncated),
-          sandboxID: String(result.metadata.sandboxID),
-        }
-      } catch (error) {
-        return { kind: "error", message: error instanceof Error ? error.message : String(error) }
-      }
-    },
-    release: async (session = input.session) => {
-      await hooks.event?.({
-        event: { type: "session.deleted", properties: { info: { id: session } } } as never,
-      })
-    },
-  }
-}
-
-function expectResult(outcome: Outcome) {
-  if (outcome.kind !== "result") throw new Error(`expected a result, received error: ${outcome.message}`)
-  return outcome
-}
-
-function sessionDir(session: string) {
-  return `/tmp/opencode-sessions/${createHash("sha256").update(session).digest("hex").slice(0, 32)}`
-}
+const enabled = Boolean(process.env.OPENCODE_EXECD_TEST_ENDPOINT && workspace)
 
 const project = workspace ? path.join(workspace, "project") : "/"
 const suite = enabled ? describe : describe.skip

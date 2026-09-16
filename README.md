@@ -84,6 +84,42 @@ Each session is pinned to the endpoint that first served it, and `session.delete
 
 Dispatch falls back to the remaining endpoints when the pinned one fails or answers `503` (capacity exhausted or session already executing). Authentication errors, `400` validation errors, and other non-`503` responses surface immediately to the tool call instead of silently running the command on a different node.
 
+## Multiple replicas behind one URL
+
+The worker keeps per-session state on the node that ran the command: the session `HOME`/temp
+directories, the in-flight command registry, and the `execd` command id used for cancellation. A
+plain round-robin load balancer therefore breaks three behaviours at once. Measured with two
+replicas behind nginx:
+
+| Symptom | Round robin (`gateway.test.ts`) | Sticky (`gateway-sticky.test.ts`) |
+| --- | --- | --- |
+| Session `HOME` state | `MISSING, MISSING, MISSING, MISSING` - written on one replica, read on the other | `state, state, state` |
+| Two concurrent commands for one session | both accepted, on two different replicas | second rejected with `503 ... already executing` |
+| `POST /release` | reached the other replica, session directory leaked | removed on every replica |
+
+The plugin sends `x-opencode-session: <sessionID>` on `/execute` and `/release`, so a load balancer
+can pin a session without parsing the JSON body:
+
+```nginx
+map $http_x_opencode_session $sticky_key {
+  ""      $request_id;                  # header-less callers are not funnelled to one replica
+  default $http_x_opencode_session;
+}
+
+upstream execd_workers {
+  hash $sticky_key consistent;          # one session -> one replica
+  server worker-1.internal:9010;
+  server worker-2.internal:9010;
+}
+```
+
+Stickiness still spreads different sessions across replicas, so capacity adds up across them.
+Adding or removing a replica remaps some sessions, and the session `HOME` starts empty on the new
+node: keep `HOME` on shared storage (`OPENCODE_SESSION_ROOT` on CubeFS) when commands depend on
+state across calls. If a sticky gateway is not an option, pass the replica list through plugin option
+`endpoints` (or `OPENCODE_EXECD_WORKER_URLS`) instead: the plugin then hashes the session id itself
+and pins it client-side.
+
 ## Limitations
 
 This plugin removes local CPU/IO work from the OpenCode host; it is not a security boundary of its own. The worker is a multi-tenant execution pool that shares a kernel, process namespace, network namespace, and Unix identity across sessions. Filesystem tools still run with the OpenCode process's own privileges, and CubeFS ACLs remain the authoritative filesystem boundary.

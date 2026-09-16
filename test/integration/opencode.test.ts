@@ -98,7 +98,7 @@ async function peakCpuWhile(work: Promise<unknown>) {
   const sampler = (async () => {
     while (!done) {
       peak = Math.max(peak, await cpuPercent())
-      await Bun.sleep(500)
+      await Bun.sleep(250)
     }
   })()
   await work
@@ -167,7 +167,7 @@ suite("opencode integration: bash override through a real session", () => {
   }, 300_000)
 
   test("saturates the container with parallel compute", async () => {
-    const command = `{ for i in 1 2 3 4; do ${compute(10_000_000)} & done; wait; } | sort -u | wc -l`
+    const command = `{ for i in 1 2 3 4; do ${compute(60_000_000)} & done; wait; } | sort -u | wc -l`
     const peak = await peakCpuWhile(expectReported(command, "1"))
     console.log(`[opencode] cpu peak during parallel compute: ${peak}%`)
     if (container) expect(peak).toBeGreaterThan(10)

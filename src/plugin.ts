@@ -42,6 +42,24 @@ export async function OpenCodeExecdPlugin(
           workdir: tool.schema.string().optional().describe("Working directory, relative to the project by default"),
         },
         async execute(args, context) {
+          const directory = path.resolve(context.directory || input.directory)
+          const worktree = context.worktree || input.worktree || directory
+          const root = path.resolve(worktree === "/" ? directory : worktree)
+          const cwd = path.resolve(directory, args.workdir ?? ".")
+
+          // A workdir outside the project needs its own external_directory approval, the same
+          // way the built-in tool asks for one. It matters more here because the worker root is
+          // usually a shared mount, so every project on that mount is reachable from a command.
+          if (!contained(directory, cwd) && !contained(root, cwd)) {
+            const globs = [path.join(cwd, "*")]
+            await context.ask({
+              permission: "external_directory",
+              patterns: globs,
+              always: globs,
+              metadata: { command: args.command, directories: [cwd], patterns: globs },
+            })
+          }
+
           await context.ask({
             permission: "bash",
             patterns: [args.command],
@@ -49,9 +67,6 @@ export async function OpenCodeExecdPlugin(
             metadata: { command: args.command },
           })
 
-          const worktree = context.worktree || input.worktree
-          const root = path.resolve(worktree === "/" ? context.directory || input.directory : worktree)
-          const cwd = path.resolve(context.directory || input.directory, args.workdir ?? ".")
           const response = await execute(options, routes, context, {
             sessionID: context.sessionID,
             workspaceID: root,
@@ -130,12 +145,21 @@ function request(
 ) {
   const headers: Record<string, string> = { "content-type": "application/json" }
   if (options.token) headers.authorization = `Bearer ${options.token}`
+  // A load balancer in front of several workers cannot read the session id from the JSON
+  // body, so it is repeated as a header for session stickiness (x-opencode-session).
+  const sessionID = (body as { sessionID?: unknown } | undefined)?.sessionID
+  if (typeof sessionID === "string" && sessionID) headers["x-opencode-session"] = sessionID
   return fetch(`${endpoint}${pathname}`, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
     signal,
   })
+}
+
+function contained(root: string, target: string) {
+  const relative = path.relative(root, target)
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
 }
 
 function parseOptions(value: PluginOptions): Options {
