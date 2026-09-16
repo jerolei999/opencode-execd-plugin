@@ -1,0 +1,35 @@
+{
+  "name": "opencode-execd-plugin",
+  "version": "0.1.0",
+  "description": "Transparent remote bash execution for OpenCode through an opencode-execd worker service",
+  "license": "MIT",
+  "private": false,
+  "type": "module",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "opencode-execd",
+    "sandbox",
+    "remote-execution"
+  ],
+  "files": [
+    "src/plugin.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./src/plugin.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18.0"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.19",
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.9.3"
+  }
+}
