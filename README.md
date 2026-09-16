@@ -100,6 +100,37 @@ bun run typecheck
 
 The tests run a real HTTP server and assert the worker request contract, permission prompting, cancellation plumbing, and release-on-delete behavior.
 
+## Integration testing
+
+`bun test` is offline: it covers the plugin contract, permission call, cancellation plumbing, and release behaviour against a fake worker. Two opt-in suites drive a **real** worker instead, and are skipped unless their environment variables are set.
+
+| Suite | Covers | Requires |
+| --- | --- | --- |
+| `test/integration/scenarios.test.ts` | 27 deterministic scenarios through the plugin's `bash` tool: default/relative/absolute `workdir`, path rejection, exit codes, multi-line, unicode, long lines, truncation, 20k lines, binary output, heredoc/pipes/background, shared-mount writes, env and secret isolation, per-session `HOME`, `/release` cleanup, same-session and capacity admission, 401, unreachable worker, and CPU-bound commands including cancellation and timeout | a worker and a workspace mount |
+| `test/integration/opencode.test.ts` | 8 scenarios through a real `opencode run` session with the model in the loop: cwd, workspace reads, explicit `workdir`, multi-line output, failing-command output, single-thread CPU compute with exact result, parallel CPU saturation, and a CPU command interrupted by its tool timeout. It samples `docker stats` so the CPU assertions prove the work happens inside the worker container | a worker, a workspace mount, and model credentials |
+
+Start a worker whose workspace is mounted at the same absolute path on both sides, then run:
+
+```bash
+# deterministic scenarios (no model needed)
+OPENCODE_EXECD_TEST_ENDPOINT=http://127.0.0.1:19020 \
+OPENCODE_EXECD_TEST_TOKEN=worker-secret \
+OPENCODE_EXECD_TEST_WORKSPACE=/private/tmp/execd-it \
+  bun run test:integration
+
+# full session scenarios through opencode itself
+OPENCODE_EXECD_TEST_ENDPOINT=http://127.0.0.1:19020 \
+OPENCODE_EXECD_TEST_TOKEN=worker-secret \
+OPENCODE_EXECD_TEST_WORKSPACE=/private/tmp/execd-it \
+OPENCODE_EXECD_TEST_MODEL=anthropic/claude-haiku-4-5 \
+OPENCODE_EXECD_TEST_CONTAINER=opencode-execd-it \
+  bun run test:opencode
+```
+
+`OPENCODE_EXECD_TEST_CONTAINER` is optional and enables the container CPU assertions; `OPENCODE_EXECD_TEST_RUNTIME=python3` switches the CPU scenarios to Python when the worker image ships it instead of Bun. `OPENCODE_BIN` overrides the `opencode` executable.
+
+On macOS mount the resolved path (`/private/tmp/...`, not `/tmp/...`) because the worker compares literal paths, and let the suite pass `--dir` to opencode: opencode resolves its project directory from `PWD`, so spawning it with only a different working directory can silently attach the parent project and run commands with the built-in tool instead of this plugin.
+
 ## Related
 
 - [opencode-execd](https://github.com/jerolei999/opencode-execd) - the worker service image that this plugin talks to.

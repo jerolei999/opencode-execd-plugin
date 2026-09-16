@@ -24,6 +24,8 @@
   },
   "scripts": {
     "test": "bun test",
+    "test:integration": "bun test test/integration/scenarios.test.ts",
+    "test:opencode": "bun test test/integration/opencode.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
