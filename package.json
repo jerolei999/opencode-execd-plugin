@@ -5,6 +5,7 @@
   "license": "MIT",
   "private": false,
   "type": "module",
+  "main": "./src/plugin.ts",
   "keywords": [
     "opencode",
     "opencode-plugin",
@@ -18,7 +19,8 @@
     "LICENSE"
   ],
   "exports": {
-    ".": "./src/plugin.ts"
+    ".": "./src/plugin.ts",
+    "./server": "./src/plugin.ts"
   },
   "scripts": {
     "test": "bun test",
